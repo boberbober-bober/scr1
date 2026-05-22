@@ -102,8 +102,9 @@
 #define INTERRUPT_HANDLER j other_exception /* No interrupts should occur */
 
 #define RVTEST_CODE_BEGIN                                               \
-        .section .text.init;                                            \
-        .org 0xC0, 0x00;                                                \
+MSG_TRAP:                                                               \
+        .string "misalign";                                             \
+        .section .text.init;                                       \
         .balign  64;                                                    \
         .weak stvec_handler;                                            \
         .weak mtvec_handler;                                            \
@@ -116,6 +117,8 @@ trap_vector:                                                            \
         beq a4, a5, _report;                                            \
         li a5, CAUSE_MACHINE_ECALL;                                     \
         beq a4, a5, _report;                                            \
+        li a5, 0;           /*0 <-> instruction address misaligned*/    \
+        beq a4, a5, my_uart_transmit;                                   \
         /* if an mtvec_handler is defined, jump to it */                \
         la a4, mtvec_handler;                                           \
         beqz a4, 1f;                                                    \
@@ -124,7 +127,19 @@ trap_vector:                                                            \
 1:      csrr a4, mcause;                                                \
         bgez a4, handle_exception;                                      \
         INTERRUPT_HANDLER;                                              \
+my_uart_transmit:                                                       \
+        lui a6, 0xf0000;                                                \
+        la a7, MSG_TRAP;                                                \
+        /*li a4, 0x6e;*/  \
+uart_transmit:                                                          \
+        lb a5, 0(a7);                                                   \
+        /*beq a5, a4, _report;*/                                            \
+        beq a5, x0, sc_exit;                                            \
+        sb a5, 0(a6);                                                   \
+        addi a7, a7, 1;                                                 \
+        j uart_transmit;                                              \
 handle_exception:                                                       \
+        /*j my_uart_transmit;*/ \
         /* we don't know how to handle whatever the exception was */    \
 other_exception:                                                        \
         /* some unhandlable exception occurred */                       \
@@ -164,6 +179,7 @@ _start:                                                                 \
         csrr a0, mhartid;                                               \
         mret;                                                           \
         .section .text;                                                 \
+        .balign  64;                                                    \
 _run_test:
 
 //-----------------------------------------------------------------------
@@ -204,7 +220,7 @@ _run_test:
         .balign 16;                                                             \
         .global begin_regstate;  begin_regstate: .dword 0; .dword 0; .dword 0;  \
         .balign 16;                                                             \
-        .global begin_signature; begin_signature:
+        .global begin_signature; begin_signature:                               \
 
 #define RVTEST_DATA_END .balign 16; .global end_signature; end_signature:
 
